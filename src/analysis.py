@@ -1,19 +1,12 @@
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
-
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
-import pandas as pd
-import networkx as nx
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
+from main import build_graph
+sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 ROUTES_CSV = "T100.csv"
 OURAIRPORTS_URL = "https://davidmegginson.github.io/ourairports-data/airports.csv"
@@ -58,6 +51,7 @@ def build_weighted_graph() -> nx.DiGraph:
     G.remove_nodes_from(isolated)
     return G
 
+# Weighted centrality measures
 def compute_centralities(G):
     pagerank = nx.pagerank(G, alpha=0.85, weight="weight")
     betweenness = nx.betweenness_centrality(G, weight="weight")
@@ -88,7 +82,7 @@ def print_rankings(pagerank, betweenness, closeness, degree, hubs, authorities, 
     print(f"\n{'='*40}\nTOP {top_n} AUTHORITIES (HITS)\n{'='*40}")
     for a, s in top(authorities): print(f"  {a}: {s:.4f}")
 
-def plot_centrality(G, measures, title):
+def plot_centrality(G : nx.DiGraph, measures: dict, title: str, save_path: str = "snapshots/"):
     pos = nx.spring_layout(G, seed=42)
     values = list(measures.values())
 
@@ -106,7 +100,9 @@ def plot_centrality(G, measures, title):
     plt.title(title)
     plt.axis("off")
     plt.tight_layout()
-    plt.show()
+    if save_path:
+        plt.savefig(save_path + "WEIGHTED_" + title.replace(' ', '_').lower() + ".png", dpi=300, bbox_inches='tight')
+    # plt.show()
 
 if __name__ == "__main__":
     print("Building weighted graph...")
@@ -125,6 +121,7 @@ if __name__ == "__main__":
     plot_centrality(G, hubs, "HITS Hubs — Core 30 US Airports")
     plot_centrality(G, authorities, "HITS Authorities — Core 30 US Airports")
 
+# Unweighted centrality measures (for comparison)
 def compute_centralities(G):
     pagerank = nx.pagerank(G, alpha=0.85)
     betweenness = nx.betweenness_centrality(G)
@@ -155,7 +152,7 @@ def print_rankings(pagerank, betweenness, closeness, degree, hubs, authorities, 
     print(f"\n{'='*40}\nTOP {top_n} AUTHORITIES (HITS)\n{'='*40}")
     for a, s in top(authorities): print(f"  {a}: {s:.4f}")
 
-def plot_centrality(G, measures, title):
+def plot_centrality(G: nx.DiGraph, measures: dict, title: str, save_path: str = "snapshots/"):
     pos = nx.spring_layout(G, seed=42)
     values = list(measures.values())
     
@@ -173,7 +170,9 @@ def plot_centrality(G, measures, title):
     plt.title(title)
     plt.axis("off")
     plt.tight_layout()
-    plt.show()
+    if save_path:
+        plt.savefig(save_path + "UNWEIGHTED_" + title.replace(' ', '_').lower() + ".png", dpi=300, bbox_inches='tight')
+    # plt.show()
 
 if __name__ == "__main__":
     print("Building graph...")
@@ -185,9 +184,11 @@ if __name__ == "__main__":
 
     print_rankings(pagerank, betweenness, closeness, degree, hubs, authorities)
 
+    # TODO: CONVERT THIS INTO MATPLOTLIB SUBPLOTS INSTEAD OF SEPARATE PLOTS
     plot_centrality(G, pagerank, "PageRank — Core 30 US Airports")
     plot_centrality(G, betweenness, "Betweenness Centrality — Core 30 US Airports")
     plot_centrality(G, closeness, "Closeness Centrality — Core 30 US Airports")
     plot_centrality(G, degree, "In-Degree Centrality — Core 30 US Airports")
     plot_centrality(G, hubs, "HITS Hubs — Core 30 US Airports")
     plot_centrality(G, authorities, "HITS Authorities — Core 30 US Airports")
+    

@@ -104,6 +104,47 @@ def plot_centrality(G : nx.DiGraph, measures: dict, title: str, save_path: str =
         plt.savefig(save_path + "WEIGHTED_" + title.replace(' ', '_').lower() + ".png", dpi=300, bbox_inches='tight')
     # plt.show()
 
+def plot_all_centralities(G, pagerank, betweenness, closeness, degree, hubs, authorities):
+    pos = nx.spring_layout(G, seed=42)
+    
+    measures = [
+        (pagerank, "PageRank"),
+        (betweenness, "Betweenness Centrality"),
+        (closeness, "Closeness Centrality"),
+        (degree, "In-Degree Centrality"),
+        (hubs, "HITS Hubs"),
+        (authorities, "HITS Authorities"),
+    ]
+    
+    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+    axes = axes.flatten()
+    
+    for i, (measure, title) in enumerate(measures):
+        ax = axes[i]
+        values = [measure[node] for node in G.nodes()]
+        
+        nodes = nx.draw_networkx_nodes(
+            G, pos,
+            node_size=400,
+            cmap=plt.cm.plasma,
+            node_color=values,
+            ax=ax
+        )
+        nodes.set_norm(mcolors.Normalize(vmin=min(values), vmax=max(values)))
+        nx.draw_networkx_labels(G, pos, font_size=7, font_color="white", ax=ax)
+        nx.draw_networkx_edges(G, pos, alpha=0.3, arrows=True, arrowsize=8, ax=ax)
+        plt.colorbar(nodes, ax=ax)
+        ax.set_title(title, fontsize=12, fontweight="bold")
+        ax.axis("off")
+    
+    plt.suptitle("Centrality Measures — FAA Core 30 US Airports (Weighted by Passengers)", 
+                 fontsize=14, fontweight="bold", y=1.02)
+    plt.tight_layout()
+    plt.savefig("centrality_comparison.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved as centrality_comparison.png")
+
+
 if __name__ == "__main__":
     print("Building weighted graph...")
     G = build_weighted_graph()
@@ -113,13 +154,7 @@ if __name__ == "__main__":
     pagerank, betweenness, closeness, degree, hubs, authorities = compute_centralities(G)
 
     print_rankings(pagerank, betweenness, closeness, degree, hubs, authorities)
-
-    plot_centrality(G, pagerank, "PageRank — Core 30 US Airports (weighted by passengers)")
-    plot_centrality(G, betweenness, "Betweenness — Core 30 US Airports (weighted)")
-    plot_centrality(G, closeness, "Closeness — Core 30 US Airports")
-    plot_centrality(G, degree, "In-Degree — Core 30 US Airports")
-    plot_centrality(G, hubs, "HITS Hubs — Core 30 US Airports")
-    plot_centrality(G, authorities, "HITS Authorities — Core 30 US Airports")
+    plot_all_centralities(G, pagerank, betweenness, closeness, degree, hubs, authorities)
 
 # Unweighted centrality measures (for comparison)
 def compute_centralities(G):

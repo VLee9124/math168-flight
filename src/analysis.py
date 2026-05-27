@@ -186,6 +186,82 @@ def plot_degree_distribution(G):
     plt.show()
     print("Saved as degree_distribution.png")
 
+def cut_set_analysis(G):
+    print(f"\n{'='*40}")
+    print("CUT SET ANALYSIS")
+    print(f"{'='*40}")
+    
+    # Baseline stats
+    G_undirected = G.to_undirected()
+    baseline_components = nx.number_connected_components(G_undirected)
+    largest_cc_size = len(max(nx.connected_components(G_undirected), key=len))
+    print(f"  Baseline components: {baseline_components}")
+    print(f"  Baseline largest component size: {largest_cc_size}")
+    
+    # Remove each airport one at a time and measure impact
+    results = []
+    for airport in G.nodes():
+        G_temp = G.copy()
+        G_temp.remove_node(airport)
+        G_temp_undirected = G_temp.to_undirected()
+        
+        components = nx.number_connected_components(G_temp_undirected)
+        largest_cc = len(max(nx.connected_components(G_temp_undirected), key=len))
+        edges_lost = G.number_of_edges() - G_temp.number_of_edges()
+        
+        results.append({
+            "airport": airport,
+            "components": components,
+            "largest_cc": largest_cc,
+            "edges_lost": edges_lost
+        })
+    
+    # Sort by largest_cc ascending (most disruptive first)
+    results.sort(key=lambda x: x["largest_cc"])
+    
+    print(f"\n  TOP 10 MOST DISRUPTIVE AIRPORTS TO REMOVE:")
+    print(f"  {'Airport':<10} {'Components':<12} {'Largest CC':<12} {'Edges Lost'}")
+    print(f"  {'-'*50}")
+    for r in results[:10]:
+        print(f"  {r['airport']:<10} {r['components']:<12} {r['largest_cc']:<12} {r['edges_lost']}")
+
+def plot_cut_set(G):
+    G_undirected = G.to_undirected()
+    
+    results = []
+    for airport in G.nodes():
+        G_temp = G.copy()
+        G_temp.remove_node(airport)
+        largest_cc = len(max(nx.connected_components(G_temp.to_undirected()), key=len))
+        edges_lost = G.number_of_edges() - G_temp.number_of_edges()
+        results.append({"airport": airport, "largest_cc": largest_cc, "edges_lost": edges_lost})
+    
+    results.sort(key=lambda x: x["largest_cc"])
+    airports = [r["airport"] for r in results]
+    largest_ccs = [r["largest_cc"] for r in results]
+    edges_lost = [r["edges_lost"] for r in results]
+    
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Plot 1 - largest connected component after removal
+    colors = ["red" if a == "MEM" else "steelblue" for a in airports]
+    axes[0].barh(airports, largest_ccs, color=colors)
+    axes[0].set_xlabel("Largest Connected Component Size")
+    axes[0].set_title("Network Resilience: Largest CC After Airport Removal")
+    axes[0].axvline(x=29, color="black", linestyle="--", label="Baseline (30 nodes)")
+    axes[0].legend()
+    
+    # Plot 2 - edges lost
+    colors2 = ["red" if a == "MEM" else "darkorange" for a in airports]
+    axes[1].barh(airports, edges_lost, color=colors2)
+    axes[1].set_xlabel("Number of Routes Lost")
+    axes[1].set_title("Routes Lost After Airport Removal")
+    
+    plt.suptitle("Cut Set Analysis — FAA Core 30 Airports", fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.savefig("cut_set_analysis.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved as cut_set_analysis.png")
 
 if __name__ == "__main__":
     print("Building weighted graph...")
@@ -199,6 +275,8 @@ if __name__ == "__main__":
     plot_all_centralities(G, pagerank, betweenness, closeness, degree, hubs, authorities)
     compute_graph_stats(G)
     plot_degree_distribution(G)
+    cut_set_analysis(G)
+    plot_cut_set(G)
 
 # Unweighted centrality measures (for comparison)
 def compute_centralities(G):

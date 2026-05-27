@@ -144,6 +144,48 @@ def plot_all_centralities(G, pagerank, betweenness, closeness, degree, hubs, aut
     plt.show()
     print("Saved as centrality_comparison.png")
 
+def compute_graph_stats(G):
+    print(f"\n{'='*40}")
+    print("GRAPH-LEVEL STATISTICS")
+    print(f"{'='*40}")
+    print(f"  Nodes: {G.number_of_nodes()}")
+    print(f"  Edges: {G.number_of_edges()}")
+    
+    # Average shortest path length and diameter (on undirected version)
+    G_undirected = G.to_undirected()
+    if nx.is_connected(G_undirected):
+        avg_path = nx.average_shortest_path_length(G_undirected)
+        diameter = nx.diameter(G_undirected)
+        print(f"  Average Shortest Path Length: {avg_path:.4f}")
+        print(f"  Diameter: {diameter}")
+    else:
+        largest_cc = G_undirected.subgraph(max(nx.connected_components(G_undirected), key=len))
+        avg_path = nx.average_shortest_path_length(largest_cc)
+        diameter = nx.diameter(largest_cc)
+        print(f"  Average Shortest Path Length (largest component): {avg_path:.4f}")
+        print(f"  Diameter (largest component): {diameter}")
+
+def plot_degree_distribution(G):
+    in_degrees = [d for _, d in G.in_degree()]
+    out_degrees = [d for _, d in G.out_degree()]
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    axes[0].hist(in_degrees, bins=10, color="mediumpurple", edgecolor="black")
+    axes[0].set_title("In-Degree Distribution — Core 30 Airports")
+    axes[0].set_xlabel("In-Degree")
+    axes[0].set_ylabel("Number of Airports")
+
+    axes[1].hist(out_degrees, bins=10, color="darkorange", edgecolor="black")
+    axes[1].set_title("Out-Degree Distribution — Core 30 Airports")
+    axes[1].set_xlabel("Out-Degree")
+    axes[1].set_ylabel("Number of Airports")
+
+    plt.tight_layout()
+    plt.savefig("degree_distribution.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved as degree_distribution.png")
+
 
 if __name__ == "__main__":
     print("Building weighted graph...")
@@ -155,6 +197,8 @@ if __name__ == "__main__":
 
     print_rankings(pagerank, betweenness, closeness, degree, hubs, authorities)
     plot_all_centralities(G, pagerank, betweenness, closeness, degree, hubs, authorities)
+    compute_graph_stats(G)
+    plot_degree_distribution(G)
 
 # Unweighted centrality measures (for comparison)
 def compute_centralities(G):

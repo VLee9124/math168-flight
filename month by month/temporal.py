@@ -22,7 +22,7 @@ def load_us_airports() -> pd.DataFrame:
     return airports
 
 
-def load_routes(routes_csv: str, year: int = None, month: int = None) -> pd.DataFrame:
+def load_routes(routes_csv: str, month: int = None) -> pd.DataFrame:
     routes = pd.read_csv(routes_csv, low_memory=False)
 
     print(routes.head())
@@ -45,21 +45,16 @@ def load_routes(routes_csv: str, year: int = None, month: int = None) -> pd.Data
     print(routes["YEAR"].unique())
     print(routes["MONTH"].unique())
 
-    if year is not None:
-        routes = routes[routes["YEAR"] == year]
-
     if month is not None:
         routes = routes[routes["MONTH"] == month]
 
-    print(routes["YEAR"].unique())
-    print(routes["MONTH"].unique())
 
     return routes
 
 
-def build_graph(routes_csv: str, year: int = None, month: int = None) -> nx.DiGraph:
+def build_graph(routes_csv: str, month: int = None) -> nx.DiGraph:
     airports = load_us_airports()
-    routes = load_routes(routes_csv, year, month)
+    routes = load_routes(routes_csv, month)
 
     airport_lookup = airports.set_index("iata_code").to_dict(orient="index")
     valid_airports = set(airport_lookup.keys())
@@ -92,7 +87,7 @@ def build_graph(routes_csv: str, year: int = None, month: int = None) -> nx.DiGr
     return G
 
 
-def display_graph(G: nx.DiGraph) -> None:
+def display_graph(G: nx.DiGraph, year: int, month: int) -> None:
     pos = {
         airport: (
             data["longitude"],
@@ -129,7 +124,7 @@ def display_graph(G: nx.DiGraph) -> None:
         font_size=10,
     )
 
-    plt.title("U.S. Airport Route Graph")
+    plt.title(f"U.S. Airport Route Graph — {year}-{month:02d}")
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
     plt.axis("equal")
@@ -138,10 +133,51 @@ def display_graph(G: nx.DiGraph) -> None:
     
     plt.show()
 
+def generate_monthly_plots():
+
+    files = [
+    r"month by month\T_T100 2018.csv",
+    r"month by month\T_T100 2019.csv",
+    r"month by month\T_T100 2020.csv",
+    ]
+
+    for file in files:
+
+        print(f"\nProcessing {file}")
+
+        df = pd.read_csv(file)
+        df.columns = df.columns.str.strip()
+
+        months = sorted(df["MONTH"].unique())
+
+        for month in months:
+
+            print(f"  → Month {month}")
+
+            G = build_graph(file, month=month)
+
+            year = int(df["YEAR"].iloc[0])
+
+            display_graph(G, year, month)
+
+            filename = f"snapshot_{year}_{month:02d}.png"
+
+            plt.savefig(filename, dpi=300)
+            plt.close()
+
+            print(f"    saved {filename}")
+
 
 if __name__ == "__main__":
-    graph = build_graph(ROUTES_CSV, year=2026, month=1)
-    print(f"Airports: {graph.number_of_nodes()}")
-    print(f"Routes: {graph.number_of_edges()}")
+    # graph = build_graph(ROUTES_CSV, year=2026, month=1)
+    # print(f"Airports: {graph.number_of_nodes()}")
+    # print(f"Routes: {graph.number_of_edges()}")
 
-    display_graph(graph)
+    # display_graph(graph)
+    # df = pd.read_csv("month by month/T_T100 2018.csv")
+    # print(df["MONTH"].unique())
+    # print(df["YEAR"].unique())
+
+    G = build_graph("month by month/T_T100 2018.csv", month=1)
+    display_graph(G, 2018, 1)
+    plt.show()

@@ -33,12 +33,15 @@ def load_airport_coords() -> dict:
 def load_routes(routes_csv: str, month: int = None) -> pd.DataFrame:
     routes = pd.read_csv(routes_csv, low_memory=False)
     routes.columns = routes.columns.str.strip().str.upper().str.replace(" ", "_")
-    routes = routes[["ORIGIN", "DEST", "YEAR", "MONTH", "DEPARTURES_PERFORMED"]].dropna()
+    routes = routes[["ORIGIN", "DEST", "YEAR", "MONTH"]].dropna()
     routes["ORIGIN"] = routes["ORIGIN"].astype(str).str.strip().str.upper()
     routes["DEST"]   = routes["DEST"].astype(str).str.strip().str.upper()
     routes = routes[routes["ORIGIN"] != routes["DEST"]]
     if month is not None:
         routes = routes[routes["MONTH"] == month]
+
+    # Each row = 1 flight record, sum rows per route to get total flights
+    routes["DEPARTURES_PERFORMED"] = 1
     return (
         routes.groupby(["ORIGIN", "DEST", "YEAR", "MONTH"], as_index=False)
         ["DEPARTURES_PERFORMED"].sum()
@@ -120,8 +123,41 @@ def display_graph(G: nx.DiGraph, year: int, month: int, save_path: str = None) -
         plt.show()
 
 
+def print_departure_stats(G: nx.DiGraph) -> pd.DataFrame:
+    """Print total departures and arrivals per airport."""
+    stats = {}
+    for node in G.nodes():
+        total_out = sum(d["weight"] for _, _, d in G.out_edges(node, data=True))
+        total_in  = sum(d["weight"] for _, _, d in G.in_edges(node, data=True))
+        stats[node] = {"departures": total_out, "arrivals": total_in}
+
+    df = pd.DataFrame(stats).T.sort_values("departures", ascending=False)
+    print(df)
+    return df
+
+
+def compute_centrality(G: nx.DiGraph) -> pd.DataFrame:
+    """Compute key centrality measures for all airports."""
+    betweenness = nx.betweenness_centrality(G, weight="weight")
+    closeness   = nx.closeness_centrality(G)
+    pagerank    = nx.pagerank(G, weight="weight")
+    in_degree   = nx.in_degree_centrality(G)
+    out_degree  = nx.out_degree_centrality(G)
+
+    df = pd.DataFrame({
+        "betweenness": betweenness,
+        "closeness":   closeness,
+        "pagerank":    pagerank,
+        "in_degree":   in_degree,
+        "out_degree":  out_degree,
+    }).sort_values("pagerank", ascending=False)
+
+    print(df.round(4))
+    return df
+
+
 def generate_monthly_plots(output_dir: str = "."):
-    # Fetch coordinates once — reused across all 36 months
+    """Generate and save a graph image for every month across all 3 years."""
     airport_coords = load_airport_coords()
     print(f"Loaded coordinates for {len(airport_coords)} airports")
 
@@ -147,6 +183,14 @@ def generate_monthly_plots(output_dir: str = "."):
 if __name__ == "__main__":
     airport_coords = load_airport_coords()
     G = build_graph("month by month/T_T100 2018.csv", airport_coords, month=1)
+
     print(f"Airports : {G.number_of_nodes()}")
     print(f"Routes   : {G.number_of_edges()}")
+
+    print("\n--- Departure Stats ---")
+    print_departure_stats(G)
+
+    print("\n--- Centrality Measures ---")
+    compute_centrality(G)
+
     display_graph(G, 2018, 1)

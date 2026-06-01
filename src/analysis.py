@@ -234,7 +234,7 @@ def plot_cut_set(G):
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     
     # Plot 1 - largest connected component after removal
-    colors = ["red" if a == "MEM" else "steelblue" for a in airports]
+    colors = ["red" if a in ("MEM", "HNL") else "steelblue" for a in airports]
     axes[0].barh(airports, largest_ccs, color=colors)
     axes[0].set_xlabel("Largest Connected Component Size")
     axes[0].set_title("Network Resilience: Largest CC After Airport Removal")
@@ -242,7 +242,7 @@ def plot_cut_set(G):
     axes[0].legend()
     
     # Plot 2 - edges lost
-    colors2 = ["red" if a == "MEM" else "darkorange" for a in airports]
+    colors2 = ["red" if a in ("MEM", "HNL") else "darkorange" for a in airports]
     axes[1].barh(airports, edges_lost, color=colors2)
     axes[1].set_xlabel("Number of Routes Lost")
     axes[1].set_title("Routes Lost After Airport Removal")

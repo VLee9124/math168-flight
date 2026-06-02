@@ -119,7 +119,7 @@ def display_graph(G: nx.DiGraph, year: int, month: int, save_path: str = None) -
     plt.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches="tight",
+        plt.savefig(save_path, dpi=300, bbox_inches="tight",
                     facecolor=fig.get_facecolor())
         plt.close(fig)
         print(f"    saved {save_path}")
@@ -140,9 +140,15 @@ def print_departure_stats(G: nx.DiGraph) -> pd.DataFrame:
     return df
 
 
-def compute_centrality(G: nx.DiGraph) -> pd.DataFrame:
+def compute_centrality(G: nx.DiGraph, print_results: bool = True) -> pd.DataFrame:
     """Compute key centrality measures for all airports."""
-    betweenness = nx.betweenness_centrality(G, weight="weight")
+    
+    # Treat higher-flight count routes as "shorter" distances for betweenness and closeness calculations. Otherwise, this propogates wrongly into betweenness e.g. HNL becomes a high betweenness hub
+    G_dist = G.copy()
+    for _, _, data in G_dist.edges(data=True):
+        data["distance"] = 1 / data["weight"]
+
+    betweenness = nx.betweenness_centrality(G_dist, weight="distance")
     closeness   = nx.closeness_centrality(G)
     pagerank    = nx.pagerank(G, weight="weight")
     in_degree   = nx.in_degree_centrality(G)
@@ -156,7 +162,8 @@ def compute_centrality(G: nx.DiGraph) -> pd.DataFrame:
         "out_degree":  out_degree,
     }).sort_values("pagerank", ascending=False)
 
-    print(df.round(4))
+    if print_results:
+        print(df.round(4))
     return df
 
 
@@ -178,22 +185,22 @@ def plot_centrality_heatmaps(G: nx.DiGraph, centrality_df: pd.DataFrame,
     ncols = 3
     nrows = math.ceil(len(measures) / ncols)
 
-    plt.style.use("dark_background")
+    plt.style.use("default")
     fig, axes = plt.subplots(nrows, ncols, figsize=(7 * ncols, 6 * nrows))
-    fig.patch.set_facecolor("#0d1117")
+    fig.patch.set_facecolor("white")
     axes = axes.flatten()
 
     nodes_in_order = list(G.nodes())
 
     for i, measure in enumerate(measures):
         ax = axes[i]
-        ax.set_facecolor("#0d1117")
+        ax.set_facecolor("white")
         values = [centrality_df.loc[n, measure] for n in nodes_in_order]
 
         nx.draw_networkx_edges(
             G, pos, ax=ax,
-            alpha=0.25, arrows=True, arrowsize=8,
-            edge_color="#888", connectionstyle="arc3,rad=0.08",
+            alpha=0.18, arrows=True, arrowsize=8,
+            edge_color="#666", connectionstyle="arc3,rad=0.08",
         )
         nodes = nx.draw_networkx_nodes(
             G, pos, ax=ax,
@@ -202,23 +209,23 @@ def plot_centrality_heatmaps(G: nx.DiGraph, centrality_df: pd.DataFrame,
         )
         nodes.set_norm(mcolors.Normalize(vmin=min(values), vmax=max(values)))
 
-        # White labels with a dark outline so they stay legible on both the
-        # dark (low) and bright-yellow (high) ends of the plasma colormap.
+        # White labels with a strong dark outline remain readable on both the
+        # dark-purple and bright-yellow ends of the plasma colormap.
         labels = nx.draw_networkx_labels(
             G, pos, ax=ax,
             font_size=7, font_color="white", font_weight="bold",
         )
         for text in labels.values():
             text.set_path_effects([
-                path_effects.withStroke(linewidth=2.5, foreground="black"),
+                path_effects.withStroke(linewidth=0.5, foreground="black"),
             ])
 
         cbar = plt.colorbar(nodes, ax=ax, fraction=0.046, pad=0.04)
-        cbar.ax.tick_params(colors="gray", labelsize=7)
+        cbar.ax.tick_params(colors="black", labelsize=7)
         cbar.outline.set_edgecolor("#333")
 
         ax.set_title(measure.replace("_", " ").title(),
-                     color="white", fontsize=12, fontweight="bold")
+                     color="black", fontsize=12, fontweight="bold")
         ax.axis("off")
 
     # Hide any unused axes (e.g. 5 measures in a 2x3 grid).
@@ -227,11 +234,11 @@ def plot_centrality_heatmaps(G: nx.DiGraph, centrality_df: pd.DataFrame,
 
     when = f" — {year}-{month:02d}" if year and month else ""
     fig.suptitle(f"Centrality Measures — Core 30 U.S. Airports{when}",
-                 color="white", fontsize=15, fontweight="bold", y=1.0)
+                 color="black", fontsize=15, fontweight="bold", y=1.0)
     plt.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches="tight",
+        plt.savefig(save_path, dpi=300, bbox_inches="tight",
                     facecolor=fig.get_facecolor())
         plt.close(fig)
         print(f"    saved {save_path}")
@@ -244,12 +251,21 @@ def _draw_monthly_plot(task: tuple) -> None:
     print(f"  → Month {year}-{month:02d}")
 
     G = build_graph(file, airport_coords, month=month)
-    path = os.path.join(output_dir, f"snapshot_{year}_{month:02d}.png")
-    display_graph(G, year, month, save_path=path)
+    year_dir = os.path.join(output_dir, str(year))
+    os.makedirs(year_dir, exist_ok=True)
+
+    graph_path = os.path.join(year_dir, f"core30_graph_{year}_{month:02d}.png")
+    centrality_path = os.path.join(year_dir, f"core30_centrality_{year}_{month:02d}.png")
+
+    display_graph(G, year, month, save_path=graph_path)
+    centrality_df = compute_centrality(G, print_results=False)
+    plot_centrality_heatmaps(
+        G, centrality_df, year=year, month=month, save_path=centrality_path
+    )
 
 
-def generate_monthly_plots(output_dir: str = "."):
-    """Generate and save a graph image for every month across all configured files."""
+def generate_monthly_plots(output_dir: str = "temp"):
+    """Generate graph and centrality images for every month across all configured files."""
     airport_coords = load_airport_coords()
     print(f"Loaded coordinates for {len(airport_coords)} airports")
     os.makedirs(output_dir, exist_ok=True)
@@ -275,27 +291,11 @@ def generate_monthly_plots(output_dir: str = "."):
 
         tasks.extend((file, year, month, airport_coords, output_dir) for month in months)
 
-    # Multiprocessing to avoid sequential draw calls
+    # Multiprocessing to avoid sequential draw calls. Each task writes both the
+    # route graph and centrality subplot image for one month.
     with mp.Pool() as pool:
         pool.map(_draw_monthly_plot, tasks)
 
 
 if __name__ == "__main__":
-    airport_coords = load_airport_coords()
-    G = build_graph("monthly/T_T100 2018.csv", airport_coords, month=1)
-
-    print(f"Airports : {G.number_of_nodes()}")
-    print(f"Routes   : {G.number_of_edges()}")
-
-    print("\n--- Departure Stats ---")
-    print_departure_stats(G)
-
-    print("\n--- Centrality Measures ---")
-    centrality_df = compute_centrality(G)
-
-    os.makedirs("temp", exist_ok=True)
-    display_graph(G, 2018, 1, save_path="temp/core30_jan2018.png")
-    plot_centrality_heatmaps(G, centrality_df, year=2018, month=1,
-                             save_path="temp/core30_centrality_jan2018.png")
-
-    # generate_monthly_plots(output_dir="temp/")
+    generate_monthly_plots(output_dir="temp")

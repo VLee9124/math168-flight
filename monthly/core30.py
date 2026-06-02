@@ -2,6 +2,7 @@ import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import os
+import multiprocessing as mp
 
 OURAIRPORTS_URL = "https://davidmegginson.github.io/ourairports-data/airports.csv"
 
@@ -156,41 +157,59 @@ def compute_centrality(G: nx.DiGraph) -> pd.DataFrame:
     return df
 
 
+def _draw_monthly_plot(task: tuple) -> None:
+    file, year, month, airport_coords, output_dir = task
+    print(f"  → Month {year}-{month:02d}")
+
+    G = build_graph(file, airport_coords, month=month)
+    path = os.path.join(output_dir, f"snapshot_{year}_{month:02d}.png")
+    display_graph(G, year, month, save_path=path)
+
+
 def generate_monthly_plots(output_dir: str = "."):
-    """Generate and save a graph image for every month across all 3 years."""
+    """Generate and save a graph image for every month across all configured files."""
     airport_coords = load_airport_coords()
     print(f"Loaded coordinates for {len(airport_coords)} airports")
+    os.makedirs(output_dir, exist_ok=True)
 
     files = [
-        r"month by month\T_T100 2018.csv",
-        r"month by month\T_T100 2019.csv",
-        r"month by month\T_T100 2020.csv",
+        r"monthly/T_T100 2018.csv",
+        r"monthly/T_T100 2019.csv",
+        r"monthly/T_T100 2020.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2021.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2022.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2023.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2024.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2025.csv",
     ]
 
+    tasks = []
     for file in files:
         print(f"\nProcessing {file}")
         df     = pd.read_csv(file, low_memory=False)
         year   = int(df["YEAR"].iloc[0])
         months = sorted(df["MONTH"].dropna().unique().astype(int))
 
-        for month in months:
-            print(f"  → Month {month}")
-            G    = build_graph(file, airport_coords, month=month)
-            path = os.path.join(output_dir, f"snapshot_{year}_{month:02d}.png")
-            display_graph(G, year, month, save_path=path)
+        tasks.extend((file, year, month, airport_coords, output_dir) for month in months)
+
+    # Multiprocessing to avoid sequential draw calls
+    with mp.Pool() as pool:
+        pool.map(_draw_monthly_plot, tasks)
 
 
 if __name__ == "__main__":
-    airport_coords = load_airport_coords()
-    G = build_graph("month by month/T_T100 2018.csv", airport_coords, month=1)
+    # airport_coords = load_airport_coords()
+    # G = build_graph("month by month/T_T100 2018.csv", airport_coords, month=1)
 
-    print(f"Airports : {G.number_of_nodes()}")
-    print(f"Routes   : {G.number_of_edges()}")
+    # print(f"Airports : {G.number_of_nodes()}")
+    # print(f"Routes   : {G.number_of_edges()}")
 
-    print("\n--- Departure Stats ---")
-    print_departure_stats(G)
+    # print("\n--- Departure Stats ---")
+    # print_departure_stats(G)
 
-    print("\n--- Centrality Measures ---")
-    compute_centrality(G)
+    # print("\n--- Centrality Measures ---")
+    # compute_centrality(G)
 
-    display_graph(G, 2018, 1)
+    # display_graph(G, 2018, 1, save_path="temp/{}.png".format("core30_jan2018"))
+    
+    generate_monthly_plots(output_dir="temp/")

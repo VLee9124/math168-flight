@@ -12,25 +12,10 @@ CORE_30 = {"ATL", "BOS", "BWI", "CLT", "DCA", "DEN", "DFW", "DTW", "EWR",
            "SFO", "SLC", "TPA"}
 
 def build_weighted_graph() -> nx.DiGraph:
-    dfs = []
-    
-    # 2018-2020 files (no PASSENGERS column — use 1 as proxy)
-    files_2018_2020 = [
+    all_files = [
         "monthly/T_T100 2018.csv",
         "monthly/T_T100 2019.csv",
         "monthly/T_T100 2020.csv",
-    ]
-    for path in files_2018_2020:
-        df = pd.read_csv(path, low_memory=False)
-        df.columns = df.columns.str.strip().str.upper()
-        df = df[["ORIGIN", "DEST"]].dropna()
-        df["ORIGIN"] = df["ORIGIN"].astype(str).str.strip().str.upper()
-        df["DEST"] = df["DEST"].astype(str).str.strip().str.upper()
-        df["PASSENGERS"] = 1
-        dfs.append(df)
-    
-    # 2021-2025 + 2026 files (have PASSENGERS column)
-    files_with_passengers = [
         "monthly/T_T100D_MARKET_ALL_CARRIER 2_2021.csv",
         "monthly/T_T100D_MARKET_ALL_CARRIER 2_2022.csv",
         "monthly/T_T100D_MARKET_ALL_CARRIER 2_2023.csv",
@@ -38,25 +23,31 @@ def build_weighted_graph() -> nx.DiGraph:
         "monthly/T_T100D_MARKET_ALL_CARRIER 2_2025.csv",
         "T100.csv",
     ]
-    for path in files_with_passengers:
+    
+    dfs = []
+    for path in all_files:
         df = pd.read_csv(path, low_memory=False)
         df.columns = df.columns.str.strip().str.upper().str.replace(" ", "_")
-        df = df[["ORIGIN", "DEST", "PASSENGERS"]].dropna()
+        df = df[["ORIGIN", "DEST"]].dropna()
         df["ORIGIN"] = df["ORIGIN"].astype(str).str.strip().str.upper()
         df["DEST"] = df["DEST"].astype(str).str.strip().str.upper()
+        df = df[df["ORIGIN"] != df["DEST"]]
+        df["DEPARTURES"] = 1  # each row = 1 flight record
         dfs.append(df)
     
     routes = pd.concat(dfs, ignore_index=True)
-    routes = routes[routes["ORIGIN"] != routes["DEST"]]
     routes = routes[routes["ORIGIN"].isin(CORE_30) & routes["DEST"].isin(CORE_30)]
-    route_weights = routes.groupby(["ORIGIN", "DEST"])["PASSENGERS"].sum().reset_index()
+    
+    # Sum rows per route = total flight count
+    route_weights = routes.groupby(["ORIGIN", "DEST"])["DEPARTURES"].sum().reset_index()
     
     G = nx.DiGraph()
     for iata in CORE_30:
         G.add_node(iata)
+    
     for _, row in route_weights.iterrows():
-        if row["PASSENGERS"] > 0:
-            G.add_edge(row["ORIGIN"], row["DEST"], weight=row["PASSENGERS"])
+        if row["DEPARTURES"] > 0:
+            G.add_edge(row["ORIGIN"], row["DEST"], weight=row["DEPARTURES"])
     
     isolated = list(nx.isolates(G))
     G.remove_nodes_from(isolated)
@@ -234,7 +225,7 @@ def plot_cut_set(G):
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     
     # Plot 1 - largest connected component after removal
-    colors = ["red" if a in ("MEM", "HNL") else "steelblue" for a in airports]
+    colors = ["red" if a in ("MDW", "HNL") else "steelblue" for a in airports]
     axes[0].barh(airports, largest_ccs, color=colors)
     axes[0].set_xlabel("Largest Connected Component Size")
     axes[0].set_title("Network Resilience: Largest CC After Airport Removal")
@@ -242,7 +233,7 @@ def plot_cut_set(G):
     axes[0].legend()
     
     # Plot 2 - edges lost
-    colors2 = ["red" if a in ("MEM", "HNL") else "darkorange" for a in airports]
+    colors2 = ["red" if a in ("MDW", "HNL") else "darkorange" for a in airports]
     axes[1].barh(airports, edges_lost, color=colors2)
     axes[1].set_xlabel("Number of Routes Lost")
     axes[1].set_title("Routes Lost After Airport Removal")

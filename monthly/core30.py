@@ -1,6 +1,9 @@
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib.patheffects as path_effects
+import math
 import os
 import multiprocessing as mp
 
@@ -157,6 +160,85 @@ def compute_centrality(G: nx.DiGraph) -> pd.DataFrame:
     return df
 
 
+def plot_centrality_heatmaps(G: nx.DiGraph, centrality_df: pd.DataFrame,
+                             year: int = None, month: int = None,
+                             save_path: str = None) -> None:
+    """Draw one network heatmap per centrality measure, colouring nodes by score.
+
+    Mirrors the centrality subplot grid from analysis.py, driven by the
+    DataFrame produced by compute_centrality().
+    """
+    # Spring layout (matching analysis.py) rather than the geographic layout used
+    # by display_graph(): a true map crams the Northeast hub cluster (BOS/LGA/EWR/
+    # PHL/DCA/IAD/JFK/BWI) into an unreadable blob, so an even spread keeps every
+    # node label legible.
+    pos = nx.spring_layout(G, seed=42)
+
+    measures = list(centrality_df.columns)
+    ncols = 3
+    nrows = math.ceil(len(measures) / ncols)
+
+    plt.style.use("dark_background")
+    fig, axes = plt.subplots(nrows, ncols, figsize=(7 * ncols, 6 * nrows))
+    fig.patch.set_facecolor("#0d1117")
+    axes = axes.flatten()
+
+    nodes_in_order = list(G.nodes())
+
+    for i, measure in enumerate(measures):
+        ax = axes[i]
+        ax.set_facecolor("#0d1117")
+        values = [centrality_df.loc[n, measure] for n in nodes_in_order]
+
+        nx.draw_networkx_edges(
+            G, pos, ax=ax,
+            alpha=0.25, arrows=True, arrowsize=8,
+            edge_color="#888", connectionstyle="arc3,rad=0.08",
+        )
+        nodes = nx.draw_networkx_nodes(
+            G, pos, ax=ax,
+            nodelist=nodes_in_order, node_color=values,
+            node_size=420, cmap=plt.cm.plasma,
+        )
+        nodes.set_norm(mcolors.Normalize(vmin=min(values), vmax=max(values)))
+
+        # White labels with a dark outline so they stay legible on both the
+        # dark (low) and bright-yellow (high) ends of the plasma colormap.
+        labels = nx.draw_networkx_labels(
+            G, pos, ax=ax,
+            font_size=7, font_color="white", font_weight="bold",
+        )
+        for text in labels.values():
+            text.set_path_effects([
+                path_effects.withStroke(linewidth=2.5, foreground="black"),
+            ])
+
+        cbar = plt.colorbar(nodes, ax=ax, fraction=0.046, pad=0.04)
+        cbar.ax.tick_params(colors="gray", labelsize=7)
+        cbar.outline.set_edgecolor("#333")
+
+        ax.set_title(measure.replace("_", " ").title(),
+                     color="white", fontsize=12, fontweight="bold")
+        ax.axis("off")
+
+    # Hide any unused axes (e.g. 5 measures in a 2x3 grid).
+    for j in range(len(measures), len(axes)):
+        axes[j].axis("off")
+
+    when = f" — {year}-{month:02d}" if year and month else ""
+    fig.suptitle(f"Centrality Measures — Core 30 U.S. Airports{when}",
+                 color="white", fontsize=15, fontweight="bold", y=1.0)
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight",
+                    facecolor=fig.get_facecolor())
+        plt.close(fig)
+        print(f"    saved {save_path}")
+    else:
+        plt.show()
+
+
 def _draw_monthly_plot(task: tuple) -> None:
     file, year, month, airport_coords, output_dir = task
     print(f"  → Month {year}-{month:02d}")
@@ -181,6 +263,7 @@ def generate_monthly_plots(output_dir: str = "."):
         r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2023.csv",
         r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2024.csv",
         r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2025.csv",
+        r"monthly/T_T100 2026.csv",
     ]
 
     tasks = []
@@ -198,18 +281,21 @@ def generate_monthly_plots(output_dir: str = "."):
 
 
 if __name__ == "__main__":
-    # airport_coords = load_airport_coords()
-    # G = build_graph("month by month/T_T100 2018.csv", airport_coords, month=1)
+    airport_coords = load_airport_coords()
+    G = build_graph("monthly/T_T100 2018.csv", airport_coords, month=1)
 
-    # print(f"Airports : {G.number_of_nodes()}")
-    # print(f"Routes   : {G.number_of_edges()}")
+    print(f"Airports : {G.number_of_nodes()}")
+    print(f"Routes   : {G.number_of_edges()}")
 
-    # print("\n--- Departure Stats ---")
-    # print_departure_stats(G)
+    print("\n--- Departure Stats ---")
+    print_departure_stats(G)
 
-    # print("\n--- Centrality Measures ---")
-    # compute_centrality(G)
+    print("\n--- Centrality Measures ---")
+    centrality_df = compute_centrality(G)
 
-    # display_graph(G, 2018, 1, save_path="temp/{}.png".format("core30_jan2018"))
-    
-    generate_monthly_plots(output_dir="temp/")
+    os.makedirs("temp", exist_ok=True)
+    display_graph(G, 2018, 1, save_path="temp/core30_jan2018.png")
+    plot_centrality_heatmaps(G, centrality_df, year=2018, month=1,
+                             save_path="temp/core30_centrality_jan2018.png")
+
+    # generate_monthly_plots(output_dir="temp/")

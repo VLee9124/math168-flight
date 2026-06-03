@@ -461,7 +461,147 @@ def generate_yearly_average_plots(output_dir = "yearly averages"):
             save_path=centrality_path
         )    
 
-        print(f"Finished yearly average {year}")    
+        print(f"Finished yearly average {year}")   
+
+
+def generate_overall_graph():
+
+    airport_coords = load_airport_coords()
+
+    files = [
+        r"monthly/T_T100 2018.csv",
+        r"monthly/T_T100 2019.csv",
+        r"monthly/T_T100 2020.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2021.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2022.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2023.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2024.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2025.csv",
+        r"monthly/T_T100 2026.csv",
+    ]
+
+    all_routes = []
+
+    for file in files:
+
+        routes = load_routes(file)
+
+        routes = routes[
+            routes["ORIGIN"].isin(CORE_30)
+            & routes["DEST"].isin(CORE_30)
+        ]
+
+        all_routes.append(routes)
+
+    combined = pd.concat(all_routes, ignore_index=True)
+
+    route_totals = (
+        combined.groupby(["ORIGIN", "DEST"], as_index=False)
+        ["DEPARTURES_PERFORMED"]
+        .sum()
+    )
+
+    G = nx.DiGraph()
+
+    for iata, attrs in airport_coords.items():
+        G.add_node(iata, **attrs)
+
+    for _, row in route_totals.iterrows():
+        G.add_edge(
+            row["ORIGIN"],
+            row["DEST"],
+            weight=float(row["DEPARTURES_PERFORMED"])
+        )
+
+    centrality_df = compute_centrality(G)
+
+    display_graph(G, 2018, 2026)
+    plot_centrality_heatmaps(G, centrality_df) 
+
+def generate_total_plot(output_dir="overall"):
+
+    airport_coords = load_airport_coords()
+
+    files = [
+        r"T_T100 2018.csv",
+        r"T_T100 2019.csv",
+        r"T_T100 2020.csv",
+        r"T_T100D_MARKET_ALL_CARRIER 2_2021.csv",
+        r"T_T100D_MARKET_ALL_CARRIER 2_2022.csv",
+        r"T_T100D_MARKET_ALL_CARRIER 2_2023.csv",
+        r"T_T100D_MARKET_ALL_CARRIER 2_2024.csv",
+        r"T_T100D_MARKET_ALL_CARRIER 2_2025.csv",
+        r"T_T100 2026.csv",
+    ]
+
+    all_routes = []
+
+    for file in files:
+
+        routes = load_routes(file)
+
+        routes = routes[
+            routes["ORIGIN"].isin(CORE_30)
+            & routes["DEST"].isin(CORE_30)
+        ]
+
+        all_routes.append(routes)
+
+    combined = pd.concat(all_routes, ignore_index=True)
+
+    route_totals = (
+        combined.groupby(
+            ["ORIGIN", "DEST"],
+            as_index=False
+        )["DEPARTURES_PERFORMED"]
+        .sum()
+    )
+
+    G = nx.DiGraph()
+
+    for iata, attrs in airport_coords.items():
+        G.add_node(iata, **attrs)
+
+    for _, row in route_totals.iterrows():
+        G.add_edge(
+            row["ORIGIN"],
+            row["DEST"],
+            weight=float(row["DEPARTURES_PERFORMED"])
+        )
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    graph_path = os.path.join(
+        output_dir,
+        "core30_total_2018_2026.png"
+    )
+
+    centrality_path = os.path.join(
+        output_dir,
+        "core30_total_centrality_2018_2026.png"
+    )
+
+    display_graph(
+        G,
+        year=2018,
+        month=1,
+        save_path=graph_path
+    )
+
+    centrality_df = compute_centrality(
+        G,
+        print_results=False
+    )
+
+    plot_centrality_heatmaps(
+        G,
+        centrality_df,
+        save_path=centrality_path
+    )
+
+    print("Finished overall 2018-2026 network")
+
+
 
 
 if __name__ == "__main__":
@@ -469,6 +609,8 @@ if __name__ == "__main__":
 
     # generate_monthly_plots(output_dir="temp")
 
-    generate_monthly_average_plots(output_dir="monthly averages")
+    # generate_monthly_average_plots(output_dir="monthly averages")
 
-    generate_yearly_average_plots(output_dir="yearly averages")
+    # generate_yearly_average_plots(output_dir="yearly averages")
+
+    generate_total_plot()

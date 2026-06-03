@@ -73,6 +73,22 @@ def build_graph(routes_csv: str, airport_coords: dict, month: int = None) -> nx.
 
     return G
 
+def build_average_graph(route_frames: list[pd.DataFrame], airport_coords: dict) -> nx.DiGraph:
+
+    combined = pd.concat(route_frames, ignore_index=True)
+
+    avg_routes = (combined.groupby(["ORIGIN", "DEST"])["DEPARTURES_PERFORMED"].mean().reset_index())
+
+    G = nx.DiGraph()
+
+    for iata, attrs in airport_coords.items():
+        G.add_node(iata, **attrs)
+
+    for _, row in avg_routes.iterrows():
+        G.add_edge(row["ORIGIN"], row["DEST"], weight=float(row["DEPARTURES_PERFORMED"]))
+
+    return G
+
 
 def display_graph(G: nx.DiGraph, year: int, month: int, save_path: str = None) -> None:
     pos = {n: (d["longitude"], d["latitude"]) for n, d in G.nodes(data=True)}
@@ -296,6 +312,163 @@ def generate_monthly_plots(output_dir: str = "temp"):
     with mp.Pool() as pool:
         pool.map(_draw_monthly_plot, tasks)
 
+def generate_monthly_average_plots(output_dir="monthly averages"):
+
+    airport_coords = load_airport_coords()
+
+    files = [
+        r"monthly/T_T100 2018.csv",
+        r"monthly/T_T100 2019.csv",
+        r"monthly/T_T100 2020.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2021.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2022.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2023.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2024.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2025.csv",
+        r"monthly/T_T100 2026.csv",
+    ]
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    for month in range(1, 13):
+
+        monthly_frames = []
+
+        for file in files:
+
+            routes = load_routes(file, month=month)
+
+            routes = routes[
+                routes["ORIGIN"].isin(CORE_30)
+                & routes["DEST"].isin(CORE_30)
+            ]
+
+            if not routes.empty:
+                monthly_frames.append(routes)
+
+        if not monthly_frames:
+            continue
+
+        G = build_average_graph(monthly_frames, airport_coords)
+
+        graph_path = os.path.join(
+            output_dir,
+            f"average_graph_month_{month:02d}.png"
+        )
+
+        centrality_path = os.path.join(
+            output_dir,
+            f"average_centrality_month_{month:02d}.png"
+        )
+
+        display_graph(
+            G,
+            year=0,
+            month=month,
+            save_path=graph_path
+        )
+
+        centrality_df = compute_centrality(
+            G,
+            print_results=False
+        )
+
+        plot_centrality_heatmaps(
+            G,
+            centrality_df,
+            save_path=centrality_path
+        )
+
+        print(f"Finished monthly average {month:02d}")
+
+def generate_yearly_average_plots(output_dir = "yearly averages"):
+
+    airport_coords = load_airport_coords()
+
+    files = [
+        r"monthly/T_T100 2018.csv",
+        r"monthly/T_T100 2019.csv",
+        r"monthly/T_T100 2020.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2021.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2022.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2023.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2024.csv",
+        r"monthly/T_T100D_MARKET_ALL_CARRIER 2_2025.csv",
+        r"monthly/T_T100 2026.csv",
+    ]
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    for file in files:
+
+        df = pd.read_csv(file, low_memory=False)
+
+        year = int(df["YEAR"].iloc[0])
+
+        routes = load_routes(file)
+
+        routes = routes[
+            routes["ORIGIN"].isin(CORE_30)
+            & routes["DEST"].isin(CORE_30)
+        ]
+
+        monthly_route_frames = []
+
+        for month in sorted(routes["MONTH"].unique()):
+
+            month_df = routes[routes["MONTH"] == month]
+
+            route_totals = (
+                month_df.groupby(
+                    ["ORIGIN", "DEST"],
+                    as_index=False
+                )["DEPARTURES_PERFORMED"]
+                .sum()
+            )
+
+            monthly_route_frames.append(route_totals)
+
+        G = build_average_graph(
+            monthly_route_frames,
+            airport_coords
+        )
+
+        graph_path = os.path.join(
+            output_dir,
+            f"average_graph_{year}.png"
+        )
+
+        centrality_path = os.path.join(
+            output_dir,
+            f"average_centrality_{year}.png"
+        )
+
+        display_graph(
+            G,
+            year=year,
+            month=1,
+            save_path=graph_path
+        )
+
+        centrality_df = compute_centrality(
+            G,
+            print_results=False
+        )
+
+        plot_centrality_heatmaps(
+            G,
+            centrality_df,
+            save_path=centrality_path
+        )    
+
+        print(f"Finished yearly average {year}")    
+
 
 if __name__ == "__main__":
-    generate_monthly_plots(output_dir="temp")
+    # generate_monthly_plots(output_dir="temp")
+
+    # generate_monthly_plots(output_dir="temp")
+
+    generate_monthly_average_plots(output_dir="monthly averages")
+
+    generate_yearly_average_plots(output_dir="yearly averages")
